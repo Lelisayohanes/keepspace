@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Cloud, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { authAPI } from "@/lib/api";
 
 export default function Signup() {
   const [email, setEmail] = useState("");
@@ -21,12 +22,15 @@ export default function Signup() {
     }
     setIsLoading(true);
 
-    // Simulate signup
-    setTimeout(() => {
+    try {
+      await authAPI.signup(email, password);
       toast.success("Account created successfully!");
-      setIsLoading(false);
       navigate("/login");
-    }, 1500);
+    } catch (error: any) {
+      toast.error(error.message || "Signup failed");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

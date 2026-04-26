@@ -1,87 +1,100 @@
 package main
 
 import (
+	"keepspace/db"
+	"keepspace/handlers"
+	"keepspace/middleware"
+	"keepspace/storage"
 	"log"
-	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
-// Mock data and types for the MVP Go Backend structure
-// In a real scenario, this would connect to Postgres and MinIO
-type Space struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	APIKey    string    `json:"api_key,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
 func main() {
+	// Load environment variables
+	if err := godotenv.Load(); err != nil {
+		log.Println("Warning: .env file not found, using environment variables")
+	}
+
+	// Initialize database
+	if err := db.InitDB(); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+
+	// Initialize MinIO
+	if err := storage.InitMinio(); err != nil {
+		log.Fatalf("Failed to initialize MinIO: %v", err)
+	}
+
+	// Set Gin mode
+	if os.Getenv("GIN_MODE") == "release" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	r := gin.Default()
 
 	// CORS configuration
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
+		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:3001", "http://localhost:5173"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-API-Key"},
-		ExposeHeaders:    []string{"Content-Length"},
+		ExposeHeaders:    []string{"Content-Length", "Content-Disposition"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
 
+	// Health check endpoint
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"status":  "ok",
+			"service": "KeepSpace API",
+		})
+	})
+
 	// API Routes
 	v1 := r.Group("/api/v1")
 	{
-		// Auth
+		// Auth routes (public)
 		auth := v1.Group("/auth")
 		{
-			auth.POST("/signup", func(c *gin.Context) {
-				c.JSON(http.StatusCreated, gin.H{"message": "User created"})
-			})
-			auth.POST("/login", func(c *gin.Context) {
-				c.JSON(http.StatusOK, gin.H{
-					"access_token":  "mock_access_token",
-					"refresh_token": "mock_refresh_token",
-				})
-			})
+			auth.POST("/signup", handlers.Signup)
+			auth.POST("/login", handlers.Login)
+			auth.POST("/refresh", handlers.RefreshToken)
 		}
 
-		// Spaces (Protected by JWT)
+		// Space routes (protected by JWT)
 		spaces := v1.Group("/spaces")
+		spaces.Use(middleware.AuthMiddleware())
 		{
-			spaces.GET("", func(c *gin.Context) {
-				c.JSON(http.StatusOK, []Space{
-					{ID: "1", Name: "Personal Documents", CreatedAt: time.Now()},
-					{ID: "2", Name: "Project Assets", CreatedAt: time.Now()},
-				})
-			})
-			spaces.POST("", func(c *gin.Context) {
-				c.JSON(http.StatusCreated, Space{
-					ID:        "3",
-					Name:      "New Space",
-					APIKey:    "ks_live_5173_fake_key_long_random_string",
-					CreatedAt: time.Now(),
-				})
-			})
-			spaces.DELETE("/:id", func(c *gin.Context) {
-				c.JSON(http.StatusOK, gin.H{"message": "Space deleted"})
-			})
+			spaces.GET("", handlers.ListSpaces)
+			spaces.POST("", handlers.CreateSpace)
+			spaces.DELETE("/:id", handlers.DeleteSpace)
 		}
 
-		// Files (Protected by API Key)
+		// File routes (protected by API Key)
 		files := v1.Group("/files")
+		files.Use(middleware.APIKeyMiddleware())
 		{
-			files.GET("", func(c *gin.Context) {
-				c.JSON(http.StatusOK, gin.H{"files": []string{"demo.txt", "image.png"}})
-			})
-			files.POST("", func(c *gin.Context) {
-				c.JSON(http.StatusCreated, gin.H{"message": "File uploaded"})
-			})
+			files.GET("", handlers.ListFiles)
+			files.POST("", handlers.UploadFile)
+			files.GET("/download", handlers.DownloadFile)
+			files.DELETE("", handlers.DeleteFile)
+			files.GET("/presigned-url", handlers.GetPresignedURL)
 		}
 	}
 
-	log.Println("KeepSpace Backend running on :8080")
-	// r.Run(":8080") // Uncomment to run
+	// Get port from environment
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	log.Printf("🚀 KeepSpace Backend running on :%s", port)
+	if err := r.Run(":" + port); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 }
