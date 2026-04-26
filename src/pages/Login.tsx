@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Cloud, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { authAPI } from "@/lib/api";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -17,15 +18,19 @@ export default function Login() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate login
-    setTimeout(() => {
-      localStorage.setItem("token", "fake-jwt-token");
-      localStorage.setItem("user", JSON.stringify({ email }));
+    try {
+      const response = await authAPI.login(email, password);
+      localStorage.setItem("token", response.access_token);
+      localStorage.setItem("refresh_token", response.refresh_token);
+      localStorage.setItem("user", JSON.stringify(response.user));
       toast.success("Welcome back to KeepSpace!");
-      setIsLoading(false);
-      navigate("/dashboard");
       window.dispatchEvent(new Event("storage"));
-    }, 1000);
+      navigate("/dashboard");
+    } catch (error: any) {
+      toast.error(error.message || "Login failed");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

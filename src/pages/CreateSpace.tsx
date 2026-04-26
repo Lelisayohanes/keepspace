@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Cloud, Loader2, ArrowLeft, Copy, Check, Key } from "lucide-react";
 import { toast } from "sonner";
+import { spacesAPI } from "@/lib/api";
 
 export default function CreateSpace() {
   const [name, setName] = useState("");
@@ -18,12 +19,16 @@ export default function CreateSpace() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate creation
-    setTimeout(() => {
-      setApiKey("ks_live_5173_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15));
-      setIsLoading(false);
+    try {
+      const response = await spacesAPI.create(name);
+      setApiKey(response.api_key || null);
       toast.success("Space created successfully!");
-    }, 1200);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to create space");
+      setIsLoading(false);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const copyToClipboard = () => {

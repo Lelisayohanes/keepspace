@@ -26,30 +26,53 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-
-interface Space {
-  id: string;
-  name: string;
-  created_at: string;
-}
+import { spacesAPI, Space } from "@/lib/api";
 
 export default function Dashboard() {
-  const [spaces, setSpaces] = useState<Space[]>([
-    { id: "1", name: "Internal Assets", created_at: new Date().toLocaleDateString() },
-    { id: "2", name: "Backup Data", created_at: new Date().toLocaleDateString() },
-  ]);
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchSpaces();
+  }, []);
+
+  const fetchSpaces = async () => {
+    try {
+      const data = await spacesAPI.list();
+      setSpaces(data);
+    } catch (error: any) {
+      if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+        toast.error("Session expired. Please login again.");
+        navigate("/login");
+      } else {
+        toast.error("Failed to load spaces");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("refresh_token");
     localStorage.removeItem("user");
     window.dispatchEvent(new Event("storage"));
     navigate("/login");
   };
 
-  const handleDelete = (id: string) => {
-    setSpaces(spaces.filter(s => s.id !== id));
-    toast.success("Space deleted successfully");
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this space? All files will be permanently deleted.")) {
+      return;
+    }
+
+    try {
+      await spacesAPI.delete(id);
+      setSpaces(spaces.filter(s => s.id !== id));
+      toast.success("Space deleted successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete space");
+    }
   };
 
   return (
@@ -133,60 +156,64 @@ export default function Dashboard() {
               <CardDescription>View and manage your private storage containers</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader className="bg-muted/50">
-                  <TableRow>
-                    <TableHead className="pl-6">Name</TableHead>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right pr-6">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {spaces.map((space) => (
-                    <TableRow key={space.id} className="group hover:bg-muted/20">
-                      <TableCell className="font-medium pl-6">
-                        <div className="flex items-center gap-2">
-                          <Cloud className="h-4 w-4 text-primary/70" />
-                          {space.name}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{space.id}</TableCell>
-                      <TableCell className="text-muted-foreground">{space.created_at}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-200">Active</Badge>
-                      </TableCell>
-                      <TableCell className="text-right pr-6">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary" title="View Keys">
-                            <Key className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary" title="Open Space">
-                            <ExternalLink className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => handleDelete(space.id)}
-                            title="Delete Space"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {spaces.length === 0 && (
+              {isLoading ? (
+                <div className="p-8 text-center text-muted-foreground">Loading spaces...</div>
+              ) : (
+                <Table>
+                  <TableHeader className="bg-muted/50">
                     <TableRow>
-                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
-                        No spaces found. Create your first one to get started.
-                      </TableCell>
+                      <TableHead className="pl-6">Name</TableHead>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right pr-6">Actions</TableHead>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {spaces.map((space) => (
+                      <TableRow key={space.id} className="group hover:bg-muted/20">
+                        <TableCell className="font-medium pl-6">
+                          <div className="flex items-center gap-2">
+                            <Cloud className="h-4 w-4 text-primary/70" />
+                            {space.name}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">{space.id}</TableCell>
+                        <TableCell className="text-muted-foreground">{space.created_at}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-200">Active</Badge>
+                        </TableCell>
+                        <TableCell className="text-right pr-6">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary" title="View Keys">
+                              <Key className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary" title="Open Space">
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => handleDelete(space.id)}
+                              title="Delete Space"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {spaces.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                          No spaces found. Create your first one to get started.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </div>
