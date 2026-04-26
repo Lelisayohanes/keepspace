@@ -290,4 +290,3 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
-**⚡ Powered by [Dala](https://dala.gebeya.com)** - The AI-powered web development platform
